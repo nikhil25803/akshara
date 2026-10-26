@@ -1,4 +1,4 @@
-# Akshara (अक्षर)
+# Akshara | अक्षर
 
 **From text to understanding.**
 
