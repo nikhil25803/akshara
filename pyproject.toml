@@ -1,0 +1,28 @@
+[project]
+name = "akshara"
+version = "0.1.0"
+description = "Akshara is an open-source, local-first document intelligence engine built with Python. It aims to turn images and PDFs into structured data and useful answers using OCR and optional LLMs."
+readme = "README.md"
+authors = [
+    { name = "Nikhil", email = "nikhil25803@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.162.0",
+    "pydantic-settings>=2.16.1",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+akshara = "akshara.main:run"
+
+[build-system]
+requires = ["uv_build>=0.9.18,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "ruff>=0.17.2",
+]
