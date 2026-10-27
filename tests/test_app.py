@@ -1,11 +1,7 @@
 from fastapi.testclient import TestClient
 
-from akshara.main import app
 
-client = TestClient(app)
-
-
-def test_root() -> None:
+def test_root(client: TestClient) -> None:
     response = client.get("/")
 
     assert response.status_code == 200
@@ -16,8 +12,8 @@ def test_root() -> None:
     assert body["features"]["ocr"] is True
 
 
-def test_health() -> None:
+def test_health(client: TestClient) -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "ok", "paddleocr": True}

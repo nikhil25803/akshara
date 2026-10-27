@@ -9,8 +9,18 @@ authors = [
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.162.0",
+    "numpy>=2.4.3",
+    "paddleocr>=3.3,<4",
+    "pillow>=12.1.1",
     "pydantic-settings>=2.16.1",
+    "pymupdf>=1.27.2.2",
+    "python-multipart>=0.0.22",
     "uvicorn[standard]>=0.54.0",
+]
+
+[project.optional-dependencies]
+ocr = [
+    "paddlepaddle==3.2.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
 
 [project.scripts]
@@ -26,3 +36,11 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.17.2",
 ]
+
+[[tool.uv.index]]
+name = "paddle"
+url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
+explicit = true
+
+[tool.uv.sources]
+paddlepaddle = { index = "paddle" }
