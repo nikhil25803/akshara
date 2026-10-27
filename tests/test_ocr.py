@@ -1,4 +1,6 @@
 import os
+import threading
+import time
 from io import BytesIO
 
 import pymupdf as fitz
@@ -134,7 +136,7 @@ def test_language_must_be_enabled(
 
     post_file(client, image_bytes(), "image/png", "?language=en")
     post_file(client, image_bytes(), "image/png", "?language=en")
-    assert ocr_service[1] == ["hi", "en"]
+    assert ocr_service[1] == ["en", "hi"]
 
 
 def test_embedded_pdf_text_skips_ocr(
@@ -152,7 +154,7 @@ def test_embedded_pdf_text_skips_ocr(
     assert "Embedded text" in body["text"]
     assert body["pages"][0]["extraction_source"] == "embedded_text"
     assert "confidence" not in body["pages"][0]["blocks"][0]
-    assert ocr_service[1] == []
+    assert ocr_service[1] == ["en"]
 
 
 def test_blank_pdf_uses_ocr(client: TestClient) -> None:
@@ -243,8 +245,68 @@ def test_degraded_runtime_returns_503(client: TestClient) -> None:
     app.state.ocr_service = service
     service.probe()
 
-    assert client.get("/health").json() == {"status": "degraded", "paddleocr": False}
+    health = client.get("/health")
+    assert health.status_code == 503
+    assert health.json() == {"status": "degraded", "paddleocr": False}
     assert post_file(client, image_bytes(), "image/png").status_code == 503
+
+
+def test_failed_default_engine_preload_returns_503(client: TestClient) -> None:
+    def fail_engine(_language: str):
+        raise RuntimeError("native initialization failed")
+
+    service = OCRService(
+        settings, engine_factory=fail_engine, runtime_probe=lambda: True
+    )
+    app.state.ocr_service = service
+    service.probe()
+
+    assert service.runtime_installed is False
+    assert client.get("/health").status_code == 503
+    assert post_file(client, image_bytes(), "image/png").status_code == 503
+
+
+def test_health_returns_503_while_default_engine_is_loading() -> None:
+    loading = threading.Event()
+    release = threading.Event()
+
+    def slow_engine(_language: str) -> FakeEngine:
+        loading.set()
+        assert release.wait(timeout=1)
+        return FakeEngine()
+
+    service = OCRService(
+        settings, engine_factory=slow_engine, runtime_probe=lambda: True
+    )
+    previous_service = app.state.ocr_service
+    app.state.ocr_service = service
+    try:
+        with TestClient(app) as test_client:
+            assert loading.wait(timeout=1)
+            response = test_client.get("/health")
+            assert response.status_code == 503
+            assert response.json() == {"status": "degraded", "paddleocr": False}
+
+            release.set()
+            deadline = time.monotonic() + 1
+            while not service.ready and time.monotonic() < deadline:
+                time.sleep(0.001)
+            assert test_client.get("/health").status_code == 200
+    finally:
+        release.set()
+        app.state.ocr_service = previous_service
+
+
+def test_default_engine_is_preloaded_and_reused(
+    client: TestClient,
+    ocr_service: tuple[OCRService, list[str]],
+) -> None:
+    assert ocr_service[1] == ["en"]
+
+    post_file(client, image_bytes(), "image/png")
+    post_file(client, image_bytes(), "image/png")
+
+    assert ocr_service[1] == ["en"]
 
 
 def test_busy_runtime_returns_429(

@@ -97,8 +97,11 @@ docker run --rm -p 8000:8000 \
 
 Use `ghcr.io/nikhil25803/akshara:0.0.1` instead of `:latest` for a
 reproducible deployment. The image currently targets `linux/amd64` and contains
-both PaddleOCR and the CPU PaddlePaddle runtime. Language model weights download
-on first use and persist in the writable `/models` volume.
+both PaddleOCR and the CPU PaddlePaddle runtime. The first configured OCR
+language downloads and initializes before the service becomes healthy. Its
+model persists in the writable `/models` volume; additional enabled languages
+remain lazy and download on first use. An empty model cache therefore increases
+cold startup time.
 
 ## Environment configuration
 
@@ -116,7 +119,7 @@ valid.
 | Variable                      | Default    | Purpose                                                                         |
 | ----------------------------- | ---------- | ------------------------------------------------------------------------------- |
 | `API_KEY`                     | required   | Key of at least 32 characters, protects every endpoint except `/` and `/health` |
-| `OCR_LANGUAGES`               | `en,hi`    | Comma-separated language allowlist, the first language is the request default   |
+| `OCR_LANGUAGES`               | `en,hi`    | Language allowlist; the first entry is the request default and startup preload  |
 | `OCR_MAX_CONCURRENT_REQUESTS` | `1`        | Maximum simultaneous OCR operations per process                                 |
 | `MAX_FILE_SIZE_MB`            | `25`       | Maximum uploaded file size                                                      |
 | `MAX_PDF_PAGES`               | `50`       | Maximum pages per PDF                                                           |
@@ -157,9 +160,11 @@ The base response contains `text`, `language`, detected `mime_type`,
 unsupported or spoofed content, `422` for an unavailable language, `429` when
 OCR is busy, and `503` when PaddleOCR is unavailable.
 
-`GET /health` returns `{"status":"ok","paddleocr":true}` when the runtime is
-ready. A broken or missing runtime produces a degraded response without
-downloading model weights.
+`GET /health` returns HTTP `200` with `{"status":"ok","paddleocr":true}` only
+after the default language pipeline is initialized. While it is loading, or if
+initialization fails, health returns HTTP `503` with
+`{"status":"degraded","paddleocr":false}`. For container orchestration, use `/`
+as the liveness check and `/health` as the readiness check.
 
 ## Local development
 
@@ -196,6 +201,10 @@ These CPU starting points assume `ENABLE_LLM=false` and
 
 Large PDFs, high pixel limits, additional cached languages, or higher
 concurrency require workload-specific testing and larger limits.
+
+Use a persistent `/models` volume in production. With an empty or ephemeral
+volume, every replacement container must download the default server model
+before it becomes ready.
 
 ## Supported OCR languages
 

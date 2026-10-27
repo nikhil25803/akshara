@@ -1,4 +1,5 @@
 import os
+import time
 from collections.abc import Iterator
 from typing import Any
 
@@ -59,5 +60,9 @@ def client(ocr_service: tuple[OCRService, list[str]]) -> Iterator[TestClient]:
     previous_service = app.state.ocr_service
     app.state.ocr_service = ocr_service[0]
     with TestClient(app) as test_client:
+        deadline = time.monotonic() + 1
+        while not ocr_service[0].ready and time.monotonic() < deadline:
+            time.sleep(0.001)
+        assert ocr_service[0].ready
         yield test_client
     app.state.ocr_service = previous_service

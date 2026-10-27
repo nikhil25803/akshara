@@ -17,145 +17,66 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      IMAGE: ghcr.io/nikhil25803/akshara:latest
-      CONTAINER: akshara-benchmark
-      INSPECT_CONTAINER: akshara-benchmark-inspect
-      API_KEY: benchmark-api-key-with-at-least-32-characters
+      PUBLISHED_IMAGE: ghcr.io/nikhil25803/akshara:latest
+      CANDIDATE_IMAGE: akshara:pr-candidate
     steps:
       - uses: actions/checkout@v4
 
-      - name: Pull and benchmark public image
-        shell: bash
+      - name: Validate benchmark script
+        run: shellcheck .github/scripts/benchmark-image.sh
+
+      - name: Initialize report
         run: |
-          set -Eeuo pipefail
-
-          mkdir -p benchmark-output
-          touch benchmark-output/container.log
-
-          now_ms() {
-            date +%s%3N
-          }
-
-          seconds() {
-            awk -v milliseconds="$1" 'BEGIN { printf "%.3f s", milliseconds / 1000 }'
-          }
-
-          pull_started="$(now_ms)"
-          docker pull "$IMAGE" | tee benchmark-output/pull.log
-          pull_ms=$(( $(now_ms) - pull_started ))
-
-          content_bytes="$(docker image inspect --format '{{.Size}}' "$IMAGE")"
-          docker create --name "$INSPECT_CONTAINER" "$IMAGE" >/dev/null
-          installed_bytes="$(docker export "$INSPECT_CONTAINER" | wc -c | tr -d ' ')"
-          docker rm "$INSPECT_CONTAINER" >/dev/null
-
-          startup_started="$(now_ms)"
-          docker run --detach \
-            --name "$CONTAINER" \
-            --publish 8000:8000 \
-            --env ENABLE_LLM=false \
-            --env OCR_LANGUAGES=en \
-            --env API_KEY="$API_KEY" \
-            --tmpfs /models:rw,size=1g,mode=1777 \
-            "$IMAGE" >/dev/null
-
-          ready=false
-          for _ in {1..900}; do
-            if curl --fail --silent --max-time 2 \
-              http://127.0.0.1:8000/health \
-              > benchmark-output/health.json; then
-              ready=true
-              break
-            fi
-            sleep 1
-          done
-          if [ "$ready" != true ]; then
-            echo "Container did not become healthy within 15 minutes" >&2
-            exit 1
-          fi
-          startup_ms=$(( $(now_ms) - startup_started ))
-
-          curl --fail --silent --show-error http://127.0.0.1:8000/ \
-            > benchmark-output/root.json
-          version="$(python3 -c 'import json; print(json.load(open("benchmark-output/root.json"))["version"])')"
-          python3 -c 'import json; data=json.load(open("benchmark-output/root.json")); assert data["name"] == "Akshara"'
-          python3 -c 'import json; data=json.load(open("benchmark-output/health.json")); assert data["status"] == "ok" and data["paddleocr"] is True'
-
-          auth_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
-            http://127.0.0.1:8000/docs)"
-          test "$auth_status" = "401"
-
-          cold_started="$(now_ms)"
-          if ! cold_status="$(curl --silent --show-error --max-time 900 \
-            --output benchmark-output/cold-ocr.json \
-            --write-out '%{http_code}' \
-            --request POST \
-            --header "api_key: $API_KEY" \
-            --form 'file=@assets/img/banner.png;type=image/png' \
-            'http://127.0.0.1:8000/v1/ocr?language=en')"; then
-            echo "Cold OCR request failed or timed out" >&2
-            exit 1
-          fi
-          cold_ms=$(( $(now_ms) - cold_started ))
-          test "$cold_status" = "200"
-          python3 -c 'import json; data=json.load(open("benchmark-output/cold-ocr.json")); assert data["text"].strip()'
-
-          warm_started="$(now_ms)"
-          if ! warm_status="$(curl --silent --show-error --max-time 900 \
-            --output benchmark-output/warm-ocr.json \
-            --write-out '%{http_code}' \
-            --request POST \
-            --header "api_key: $API_KEY" \
-            --form 'file=@assets/img/banner.png;type=image/png' \
-            'http://127.0.0.1:8000/v1/ocr?language=en')"; then
-            echo "Warm OCR request failed or timed out" >&2
-            exit 1
-          fi
-          warm_ms=$(( $(now_ms) - warm_started ))
-          test "$warm_status" = "200"
-          python3 -c 'import json; data=json.load(open("benchmark-output/warm-ocr.json")); assert data["text"].strip()'
-
-          docker logs --timestamps "$CONTAINER" \
-            > benchmark-output/container.log 2>&1
-
-          content_size="$(numfmt --to=iec-i --suffix=B "$content_bytes")"
-          installed_size="$(numfmt --to=iec-i --suffix=B "$installed_bytes")"
           {
-            echo "## GHCR Docker benchmark"
+            echo "## Docker image comparison"
             echo
-            echo "Image: \`$IMAGE\` (Akshara $version)"
-            echo
-            echo "| Metric | Result |"
-            echo "| --- | ---: |"
-            echo "| Image pull | $(seconds "$pull_ms") |"
-            echo "| Image content size | $content_size |"
-            echo "| Exported root filesystem | $installed_size |"
-            echo "| Start to health | $(seconds "$startup_ms") |"
-            echo "| First OCR (cold models) | $(seconds "$cold_ms") |"
-            echo "| Second OCR (warm models) | $(seconds "$warm_ms") |"
-            echo
-            echo "Health: \`$(cat benchmark-output/health.json)\`"
+            echo "| Image | Pull/build | Image content | Exported root | Start to health | First OCR | Warm OCR | Start to first OCR |"
+            echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Capture container logs
-        if: failure()
+      - name: Pull published image
+        id: published
         shell: bash
         run: |
-          mkdir -p benchmark-output
-          docker logs --timestamps "$CONTAINER" \
-            > benchmark-output/container.log 2>&1 || true
+          started="$(date +%s%3N)"
+          docker pull "$PUBLISHED_IMAGE" | tee published-pull.log
+          echo "setup_ms=$(( $(date +%s%3N) - started ))" >> "$GITHUB_OUTPUT"
+
+      - name: Benchmark published image
+        run: >-
+          bash .github/scripts/benchmark-image.sh
+          "$PUBLISHED_IMAGE"
+          Published
+          akshara-benchmark-published
+          8000
+          "${{ steps.published.outputs.setup_ms }}"
+          benchmark-output/published
+
+      - name: Build PR candidate
+        if: github.event_name == 'pull_request'
+        id: candidate
+        shell: bash
+        run: |
+          started="$(date +%s%3N)"
+          docker build --platform linux/amd64 --tag "$CANDIDATE_IMAGE" .
+          echo "setup_ms=$(( $(date +%s%3N) - started ))" >> "$GITHUB_OUTPUT"
+
+      - name: Benchmark PR candidate
+        if: github.event_name == 'pull_request'
+        run: >-
+          bash .github/scripts/benchmark-image.sh
+          "$CANDIDATE_IMAGE"
+          Candidate
+          akshara-benchmark-candidate
+          8001
+          "${{ steps.candidate.outputs.setup_ms }}"
+          benchmark-output/candidate
 
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: docker-benchmark-diagnostics
-          path: benchmark-output
-
-      - name: Clean up
-        if: always()
-        run: >-
-          docker rm --force
-          "$CONTAINER"
-          "$INSPECT_CONTAINER"
-          2>/dev/null || true
+          path: |
+            benchmark-output
+            published-pull.log

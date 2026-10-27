@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -16,8 +17,9 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await run_in_threadpool(app.state.ocr_service.probe)
+    initialization = asyncio.create_task(run_in_threadpool(app.state.ocr_service.probe))
     yield
+    await initialization
 
 
 # Initialize FastAPI app
