@@ -61,7 +61,7 @@ jobs:
 
           ready=false
           for _ in {1..900}; do
-            if curl --fail --silent --show-error --max-time 2 \
+            if curl --fail --silent --max-time 2 \
               http://127.0.0.1:8000/health \
               > benchmark-output/health.json; then
               ready=true
