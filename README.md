@@ -4,6 +4,14 @@
 
 **From text to understanding.**
 
+[![Test](https://github.com/nikhil25803/akshara/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/nikhil25803/akshara/actions/workflows/test.yml)
+[![Build](https://github.com/nikhil25803/akshara/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/nikhil25803/akshara/actions/workflows/build.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![PaddleOCR 3.x](https://img.shields.io/badge/PaddleOCR-3.x-0062B0)](https://github.com/PaddlePaddle/PaddleOCR)
+[![llama.cpp optional](https://img.shields.io/badge/llama.cpp-optional-555555)](https://github.com/ggml-org/llama.cpp)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+
 </div>
 
 Akshara is an open-source, local-first document intelligence
@@ -47,21 +55,13 @@ The first OCR request for each language downloads its model. The `akshara-models
 
 ## OCR API
 
-`POST /v1/ocr` accepts one `file` field as `multipart/form-data`. JPEG, PNG, and PDF content is supported. Filenames and client MIME declarations are not trusted.
+| Request | Description | Example |
+| --- | --- | --- |
+| `GET /` | Service metadata and enabled features | `curl http://localhost:8000/` |
+| `GET /health` | PaddleOCR runtime readiness | `curl http://localhost:8000/health` |
+| `POST /v1/ocr` | Extract text from a JPEG, PNG, or PDF | `curl -X POST -H "api_key: $API_KEY" -F "file=@document.pdf" http://localhost:8000/v1/ocr` |
 
-```bash
-curl -X POST http://localhost:8000/v1/ocr \
-  -H "api_key: $API_KEY" \
-  -F "file=@document.pdf"
-```
-
-Select an enabled language and optional details with query parameters:
-
-```bash
-curl -X POST "http://localhost:8000/v1/ocr?language=hi&page_details=true&extraction_source=true&coordinates=true" \
-  -H "api_key: $API_KEY" \
-  -F "file=@document.png"
-```
+`POST /v1/ocr` accepts one `file` field as `multipart/form-data`. Filenames and client MIME declarations are not trusted. Select an enabled language and optional details using `language`, `page_details`, `extraction_source`, and `coordinates` query parameters. For example: `POST /v1/ocr?language=hi&page_details=true&extraction_source=true&coordinates=true`.
 
 The compact response contains `text`, `language`, detected `mime_type`, `page_count`, and `warnings`. When details are requested, `pages` contains the selected page text/source and normalized `0..1` coordinates. PDFs use embedded text when available and OCR only for scanned pages.
 

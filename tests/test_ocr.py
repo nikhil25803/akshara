@@ -7,8 +7,8 @@ from conftest import AUTH_HEADERS, FakeEngine
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from akshara.helpers.ocr import OCRService
 from akshara.main import app, settings
-from akshara.ocr import OCRService
 
 
 def test_model_source_check_is_disabled_at_startup() -> None:

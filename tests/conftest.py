@@ -7,8 +7,8 @@ from fastapi.testclient import TestClient
 
 os.environ.setdefault("API_KEY", "test-api-key-with-at-least-32-characters")
 
+from akshara.helpers.ocr import OCRService
 from akshara.main import app, settings
-from akshara.ocr import OCRService
 
 API_KEY = "test-api-key-with-at-least-32-characters"
 AUTH_HEADERS = {"api_key": API_KEY}
@@ -20,11 +20,13 @@ class FakeResult:
             "res": {
                 "rec_texts": [text] if text else [],
                 "rec_scores": [0.99] if text else [],
-                "rec_polys": [
-                    [[0, 0], [width, 0], [width, height], [0, height]],
-                ]
-                if text
-                else [],
+                "rec_polys": (
+                    [
+                        [[0, 0], [width, 0], [width, height], [0, height]],
+                    ]
+                    if text
+                    else []
+                ),
             }
         }
 
