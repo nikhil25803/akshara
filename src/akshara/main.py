@@ -1,41 +1,53 @@
+from contextlib import asynccontextmanager
+
 import uvicorn
 from fastapi import FastAPI
+from fastapi.concurrency import run_in_threadpool
 
 from akshara import __version__
 from akshara.config import get_settings
+from akshara.helpers.ocr import OCRService
+from akshara.helpers.security import ApiKeyMiddleware, RequestSizeLimitMiddleware
+from akshara.routes.ocr import router as ocr_router
+from akshara.routes.system import router as system_router
 
 settings = get_settings()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await run_in_threadpool(app.state.ocr_service.probe)
+    yield
+
+
+# Initialize FastAPI app
 app = FastAPI(
     title="Akshara",
     description="From text to understanding.",
     version=__version__,
+    lifespan=lifespan,
 )
 
+# Initialize OCR service
+app.state.ocr_service = OCRService(settings)
 
-@app.get("/")
-def root() -> dict:
-    return {
-        "name": "Akshara",
-        "name_native": "अक्षर",
-        "version": __version__,
-        "tagline": "From text to understanding.",
-        "features": {
-            "ocr": True,
-            "llm": settings.enable_llm,
-        },
-    }
+# Middlewares
+app.add_middleware(
+    RequestSizeLimitMiddleware,
+    max_bytes=settings.max_file_size_mb * 1024 * 1024 + 64 * 1024,
+)
+app.add_middleware(ApiKeyMiddleware, api_key=settings.api_key.get_secret_value())
 
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+# Routers
+app.include_router(system_router)
+app.include_router(ocr_router)
 
 
+# Run the application
 def run() -> None:
     uvicorn.run(
         "akshara.main:app",
-        host="127.0.0.1",
-        port=8000,
+        host=settings.hostname if settings.hostname else "0.0.0.0",
+        port=settings.port if settings.port else 8080,
         reload=True,
     )

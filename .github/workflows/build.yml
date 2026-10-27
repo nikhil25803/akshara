@@ -15,7 +15,7 @@ jobs:
       - name: Build image
         run: make docker-build IMAGE=akshara TAG=ci
       - name: Start container
-        run: docker run --detach --name akshara-ci --publish 8000:8000 --env ENABLE_LLM=false akshara:ci
+        run: docker run --detach --name akshara-ci --publish 8000:8000 --env ENABLE_LLM=false --env API_KEY=ci-only-api-key-with-at-least-32-characters akshara:ci
       - name: Smoke test
         shell: bash
         run: |
@@ -30,8 +30,9 @@ jobs:
             sleep 1
           done
 
-          python -c 'import json; assert json.load(open("/tmp/akshara-health.json")) == {"status": "ok"}'
+          python -c 'import json; data=json.load(open("/tmp/akshara-health.json")); assert data == {"status": "ok", "paddleocr": True}'
           curl --fail --silent --show-error http://127.0.0.1:8000/ | python -c 'import json, sys; assert json.load(sys.stdin)["features"]["llm"] is False'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/v1/ocr)" = "401"
       - name: Stop container
         if: always()
         run: docker rm --force akshara-ci
