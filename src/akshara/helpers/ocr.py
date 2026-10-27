@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 import numpy as np
 import pymupdf as fitz
+from fastapi import UploadFile
 from fastapi.concurrency import run_in_threadpool
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
@@ -57,6 +58,28 @@ class OCRResponse(BaseModel):
     page_count: int
     warnings: list[str]
     pages: list[OCRPage] | None = None
+
+
+def select_ocr_language(settings: Settings, language: str | None) -> str:
+    selected = (language or settings.enabled_ocr_languages[0]).lower()
+    if selected not in settings.enabled_ocr_languages:
+        raise OCRInputError(
+            f"Language must be one of: {', '.join(settings.enabled_ocr_languages)}",
+            422,
+        )
+    return selected
+
+
+async def read_upload(file: UploadFile, max_file_size_mb: int) -> bytes:
+    limit = max_file_size_mb * 1024 * 1024
+    if not file.size:
+        raise OCRInputError("Uploaded file is empty")
+    if file.size > limit:
+        raise OCRInputError("File exceeds the configured size limit", 413)
+    data = await file.read(limit + 1)
+    if len(data) > limit:
+        raise OCRInputError("File exceeds the configured size limit", 413)
+    return data
 
 
 class OCRService:

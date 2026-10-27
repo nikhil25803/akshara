@@ -8,6 +8,8 @@ from akshara.helpers.ocr import (
     OCRInputError,
     OCRResponse,
     OCRUnavailableError,
+    read_upload,
+    select_ocr_language,
 )
 
 router = APIRouter()
@@ -23,21 +25,9 @@ async def ocr(
     coordinates: Annotated[bool, Query()] = False,
 ) -> OCRResponse:
     settings = get_settings()
-    selected_language = (language or settings.enabled_ocr_languages[0]).lower()
-    if selected_language not in settings.enabled_ocr_languages:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Language must be one of: {', '.join(settings.enabled_ocr_languages)}",
-        )
-
     try:
-        if not file.size:
-            raise OCRInputError("Uploaded file is empty")
-        if file.size > settings.max_file_size_mb * 1024 * 1024:
-            raise OCRInputError("File exceeds the configured size limit", 413)
-        data = await file.read(settings.max_file_size_mb * 1024 * 1024 + 1)
-        if len(data) > settings.max_file_size_mb * 1024 * 1024:
-            raise OCRInputError("File exceeds the configured size limit", 413)
+        selected_language = select_ocr_language(settings, language)
+        data = await read_upload(file, settings.max_file_size_mb)
         return await request.app.state.ocr_service.process(
             data,
             file.content_type,

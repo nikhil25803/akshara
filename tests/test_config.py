@@ -22,3 +22,13 @@ def test_invalid_languages_are_rejected(languages: str) -> None:
 def test_api_key_must_be_at_least_32_characters() -> None:
     with pytest.raises(ValidationError):
         Settings(api_key="too-short", _env_file=None)
+
+
+def test_only_cpu_llm_device_is_supported() -> None:
+    with pytest.raises(ValidationError):
+        Settings(api_key=API_KEY, llm_device="gpu", _env_file=None)
+
+
+def test_only_llama_cpp_backend_is_supported() -> None:
+    with pytest.raises(ValidationError):
+        Settings(api_key=API_KEY, llm_backend="remote", _env_file=None)

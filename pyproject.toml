@@ -1,6 +1,6 @@
 [project]
 name = "akshara"
-version = "0.0.1"
+version = "0.0.2"
 description = "Akshara is an open-source, local-first document intelligence engine built with Python. It aims to turn images and PDFs into structured data and useful answers using OCR and optional LLMs."
 readme = "README.md"
 authors = [
@@ -21,6 +21,9 @@ dependencies = [
 [project.optional-dependencies]
 ocr = [
     "paddlepaddle==3.2.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+llm = [
+    "llama-cpp-python>=0.3.16,<0.4",
 ]
 
 [project.scripts]

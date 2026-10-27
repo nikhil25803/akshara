@@ -41,10 +41,9 @@ Akshara aims to provide that pipeline behind one local API, supporting fixed
 schemas, direct document questions, and temporary real-time chat without
 requiring users to operate external retrieval or vector infrastructure.
 
-Version 0.0.1 delivers the secure OCR foundation: PDF and image extraction,
-multilingual configuration, upload validation, authentication, limits, and CPU
-Docker deployment. Semantic extraction, in-memory retrieval, and WebSocket chat
-are planned for future releases.
+Version 0.0.2 adds prompt-driven, fixed-schema extraction with a local GGUF
+model to the secure OCR foundation. Direct questions, in-memory retrieval, and
+WebSocket chat are planned for future releases.
 
 ## Features and roadmap
 
@@ -55,7 +54,7 @@ are planned for future releases.
 | Environment-controlled multilingual OCR                              | **Available** |
 | API-key authentication and upload/resource limits                    | **Available** |
 | CPU Docker deployment with persistent model caching                  | **Available** |
-| Caller-defined fixed-schema extraction                               | **Upcoming**  |
+| Prompt-driven, caller-defined fixed-schema extraction                | **Available** |
 | Direct questions against an uploaded document                        | **Upcoming**  |
 | In-memory retrieval without an external vector database              | **Upcoming**  |
 | Session-scoped WebSocket chat (`ws://` locally, `wss://` behind TLS) | **Upcoming**  |
@@ -72,6 +71,7 @@ are planned for future releases.
 | ASGI server            | Uvicorn                              |
 | OCR engine             | PaddleOCR 3.x + PaddlePaddle 3.2 CPU |
 | Document processing    | PyMuPDF + Pillow                     |
+| Local LLM runtime      | llama.cpp via llama-cpp-python (CPU) |
 | Configuration          | Pydantic Settings                    |
 | Dependency management  | uv                                   |
 | Testing and linting    | pytest + Ruff                        |
@@ -95,10 +95,28 @@ docker run --rm -p 8000:8000 \
   ghcr.io/nikhil25803/akshara:latest
 ```
 
-Use `ghcr.io/nikhil25803/akshara:0.0.1` instead of `:latest` for a
+Use `ghcr.io/nikhil25803/akshara:0.0.2` instead of `:latest` for a
 reproducible deployment. The image currently targets `linux/amd64` and contains
-both PaddleOCR and the CPU PaddlePaddle runtime. Language model weights download
-on first use and persist in the writable `/models` volume.
+PaddleOCR, PaddlePaddle, and the CPU llama.cpp runtime. OCR language weights
+download on first use and persist in `/models`; Akshara never downloads a GGUF
+model.
+
+To enable structured extraction, place a compatible GGUF model with an embedded
+chat template at `models/model.gguf`, set `ENABLE_LLM=true`, and mount that
+writable directory instead of the named volume:
+
+```bash
+mkdir -p models
+cp /path/to/your/model.gguf models/model.gguf
+docker run --rm -p 8000:8000 \
+  --env-file .env \
+  --env LLM_MODEL_PATH=/models/model.gguf \
+  --volume "$(pwd)/models:/models" \
+  ghcr.io/nikhil25803/akshara:0.0.2
+```
+
+Model weights have separate licences and resource requirements; review them
+before deployment.
 
 ## Environment configuration
 
@@ -121,15 +139,23 @@ valid.
 | `MAX_FILE_SIZE_MB`            | `25`       | Maximum uploaded file size                                                      |
 | `MAX_PDF_PAGES`               | `50`       | Maximum pages per PDF                                                           |
 | `MAX_IMAGE_PIXELS`            | `25000000` | Maximum pixels per image or rendered PDF page                                   |
-| `ENABLE_LLM`                  | `false`    | Reserved for the upcoming local LLM feature, keep disabled                      |
+| `ENABLE_LLM`                  | `false`    | Enables `/v1/extract` and eager GGUF loading                                    |
+| `LLM_BACKEND`                 | `llama_cpp` | Local inference backend                                                        |
+| `LLM_MODEL_PATH`              | `./models/model.gguf` | Caller-provided GGUF file                                             |
+| `LLM_DEVICE`                  | `cpu`      | v0.0.2 supports CPU inference only                                              |
+| `LLM_CONTEXT_SIZE`            | `4096`     | Total model context window                                                      |
+| `LLM_THREADS`                 | `4`        | CPU inference threads                                                           |
+| `LLM_MAX_OUTPUT_TOKENS`       | `1024`     | Tokens reserved for structured output                                           |
+| `LLM_MAX_CONCURRENT_REQUESTS` | `1`        | Maximum simultaneous LLM operations per process                                 |
 
 ## API documentation
 
-| Request        | Description                           | Example                                                                                    |
-| -------------- | ------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `GET /`        | Service metadata and enabled features | `curl http://localhost:8000/`                                                              |
-| `GET /health`  | PaddleOCR runtime readiness           | `curl http://localhost:8000/health`                                                        |
-| `POST /v1/ocr` | Extract text from a JPEG, PNG, or PDF | `curl -X POST -H "api_key: $API_KEY" -F "file=@document.pdf" http://localhost:8000/v1/ocr` |
+| Request            | Description                                      | Example                                                                                        |
+| ------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `GET /`            | Service metadata and enabled features            | `curl http://localhost:8000/`                                                                  |
+| `GET /health`      | OCR and local LLM readiness                      | `curl http://localhost:8000/health`                                                            |
+| `POST /v1/ocr`     | Extract text from a JPEG, PNG, or PDF            | `curl -X POST -H "api_key: $API_KEY" -F "file=@document.pdf" http://localhost:8000/v1/ocr`     |
+| `POST /v1/extract` | Extract a prompt-defined or fixed-schema object  | See the structured extraction example below                                                   |
 
 `POST /v1/ocr` accepts one `file` field as `multipart/form-data`. Filenames and
 client MIME declarations are not trusted. Select one configured OCR language
@@ -157,9 +183,33 @@ The base response contains `text`, `language`, detected `mime_type`,
 unsupported or spoofed content, `422` for an unavailable language, `429` when
 OCR is busy, and `503` when PaddleOCR is unavailable.
 
-`GET /health` returns `{"status":"ok","paddleocr":true}` when the runtime is
-ready. A broken or missing runtime produces a degraded response without
-downloading model weights.
+### Structured extraction
+
+`POST /v1/extract` accepts a required `file` and `prompt`, plus an optional JSON
+`template`. Template leaves are `string`, `number`, `integer`, `boolean`, or
+`date`; objects can nest and a one-item array defines repeatable values. Missing
+or invalid requested values are returned as `null` with a warning.
+
+```bash
+curl -X POST "http://localhost:8000/v1/extract?language=en&evidence=true" \
+  -H "api_key: $API_KEY" \
+  -F "file=@driving-licence.png" \
+  -F "prompt=Extract the driving licence details" \
+  -F 'template={"licence_number":"string","holder":{"name":"string"},"expiry_date":"date","classes":[{"code":"string"}]}'
+```
+
+Without `template`, the response is a JSON object inferred from the prompt.
+With `evidence=true`, verified source quotes are keyed by JSON Pointer paths such
+as `/holder/name`. Documents that cannot fit in `LLM_CONTEXT_SIZE` are rejected
+instead of silently truncated.
+
+Extraction failures use `422` for invalid prompts or templates, `413` for
+upload/context limits, `429` when processing is busy, `502` for invalid model
+output after one retry, and `503` when OCR or the LLM is unavailable.
+
+`GET /health` includes `paddleocr` and `llama_cpp`. A disabled LLM reports
+`llama_cpp:false` without degrading health. When `ENABLE_LLM=true`, a missing or
+invalid model makes health degraded and `/v1/extract` returns `503`.
 
 ## Local development
 
@@ -177,6 +227,12 @@ make run
 Put the generated key in `.env` before starting the server. Full PaddlePaddle
 inference is provided by the Linux Docker image, a development environment
 without that runtime starts in degraded mode.
+
+Local structured-extraction development additionally requires a compiler and:
+
+```bash
+make sync-llm
+```
 
 Run the complete local check suite with:
 
@@ -196,6 +252,11 @@ These CPU starting points assume `ENABLE_LLM=false` and
 
 Large PDFs, high pixel limits, additional cached languages, or higher
 concurrency require workload-specific testing and larger limits.
+
+LLM sizing depends on the chosen GGUF quantization and context. Budget memory
+for the complete model plus OCR, context, and runtime overhead, start with at
+least 4 vCPUs, and benchmark representative documents before setting production
+requests or limits.
 
 ## Supported OCR languages
 

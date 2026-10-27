@@ -23,6 +23,12 @@ jobs:
       - name: Build image
         run: make docker-build IMAGE=akshara TAG=release-test
 
+      - name: Verify native runtimes
+        run: >-
+          docker run --rm akshara:release-test
+          /app/.venv/bin/python -c
+          "import paddle; import paddleocr; import llama_cpp"
+
       - name: Start container
         run: docker run --detach --name akshara-release-test --publish 8000:8000 --env ENABLE_LLM=false --env API_KEY=ci-only-api-key-with-at-least-32-characters akshara:release-test
 
@@ -42,10 +48,36 @@ jobs:
             sleep 1
           done
 
-          python -c 'import json; data=json.load(open("/tmp/akshara-health.json")); assert data == {"status": "ok", "paddleocr": True}'
+          python -c 'import json; data=json.load(open("/tmp/akshara-health.json")); assert data == {"status": "ok", "paddleocr": True, "llama_cpp": False}'
           curl --fail --silent --show-error http://127.0.0.1:8000/ | python -c 'import json, os, sys; data=json.load(sys.stdin); assert data["version"] == os.environ["EXPECTED_VERSION"]; assert data["features"]["llm"] is False'
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/v1/ocr)" = "401"
 
-      - name: Stop container
+      - name: Verify missing-model degradation
+        shell: bash
+        run: |
+          docker run --detach --name akshara-llm-missing --publish 8001:8000 \
+            --env ENABLE_LLM=true \
+            --env API_KEY=ci-only-api-key-with-at-least-32-characters \
+            akshara:release-test
+
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:8001/health > /tmp/akshara-llm-health.json; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs akshara-llm-missing
+              exit 1
+            fi
+            sleep 1
+          done
+
+          python -c 'import json; data=json.load(open("/tmp/akshara-llm-health.json")); assert data == {"status": "degraded", "paddleocr": True, "llama_cpp": False}'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            -H 'api_key: ci-only-api-key-with-at-least-32-characters' \
+            -F 'prompt=Extract metadata' \
+            -F 'file=@README.md' \
+            http://127.0.0.1:8001/v1/extract)" = "503"
+
+      - name: Stop containers
         if: always()
-        run: docker rm --force akshara-release-test
+        run: docker rm --force akshara-release-test akshara-llm-missing || true
