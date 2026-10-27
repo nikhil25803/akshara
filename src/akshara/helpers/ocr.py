@@ -76,8 +76,11 @@ class OCRService:
         self.ready = False
 
     def probe(self) -> None:
+        self.ready = False
         try:
             self.runtime_installed = self._runtime_probe()
+            if self.runtime_installed:
+                self._get_engine(self.settings.enabled_ocr_languages[0])
         # A broken native runtime must degrade readiness instead of stopping startup.
         except Exception:  # noqa: BLE001
             self.runtime_installed = False
@@ -85,9 +88,8 @@ class OCRService:
 
     @staticmethod
     def _probe_runtime() -> bool:
-        paddle = importlib.import_module("paddle")
+        importlib.import_module("paddle")
         importlib.import_module("paddleocr")
-        paddle.utils.run_check()
         return True
 
     @staticmethod
@@ -96,6 +98,7 @@ class OCRService:
 
         return PaddleOCR(
             lang=language,
+            text_detection_model_name="PP-OCRv5_server_det",
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=False,
@@ -117,7 +120,7 @@ class OCRService:
         extraction_source: bool,
         coordinates: bool,
     ) -> OCRResponse:
-        if not self.runtime_installed:
+        if not self.ready:
             raise OCRUnavailableError
         if not self._slots.acquire(blocking=False):
             raise OCRBusyError

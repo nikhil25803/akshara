@@ -1,0 +1,82 @@
+name: Docker Benchmark
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-benchmark-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PUBLISHED_IMAGE: ghcr.io/nikhil25803/akshara:latest
+      CANDIDATE_IMAGE: akshara:pr-candidate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate benchmark script
+        run: shellcheck .github/scripts/benchmark-image.sh
+
+      - name: Initialize report
+        run: |
+          {
+            echo "## Docker image comparison"
+            echo
+            echo "| Image | Pull/build | Image content | Exported root | Start to health | First OCR | Warm OCR | Start to first OCR |"
+            echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Pull published image
+        id: published
+        shell: bash
+        run: |
+          started="$(date +%s%3N)"
+          docker pull "$PUBLISHED_IMAGE" | tee published-pull.log
+          echo "setup_ms=$(( $(date +%s%3N) - started ))" >> "$GITHUB_OUTPUT"
+
+      - name: Benchmark published image
+        run: >-
+          bash .github/scripts/benchmark-image.sh
+          "$PUBLISHED_IMAGE"
+          Published
+          akshara-benchmark-published
+          8000
+          "${{ steps.published.outputs.setup_ms }}"
+          benchmark-output/published
+
+      - name: Build PR candidate
+        if: github.event_name == 'pull_request'
+        id: candidate
+        shell: bash
+        run: |
+          started="$(date +%s%3N)"
+          docker build --platform linux/amd64 --tag "$CANDIDATE_IMAGE" .
+          echo "setup_ms=$(( $(date +%s%3N) - started ))" >> "$GITHUB_OUTPUT"
+
+      - name: Benchmark PR candidate
+        if: github.event_name == 'pull_request'
+        run: >-
+          bash .github/scripts/benchmark-image.sh
+          "$CANDIDATE_IMAGE"
+          Candidate
+          akshara-benchmark-candidate
+          8001
+          "${{ steps.candidate.outputs.setup_ms }}"
+          benchmark-output/candidate
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-benchmark-diagnostics
+          path: |
+            benchmark-output
+            published-pull.log

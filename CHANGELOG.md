@@ -7,6 +7,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Preload the default OCR language before readiness and return `503` when
+  PaddleOCR is degraded.
+- Reduce the runtime image with a multi-stage build and production-only
+  dependencies.
+- Compare published and pull-request Docker performance in CI.
+
 ## [0.0.1] - 2026-10-27
 
 ### Added

@@ -11,6 +11,7 @@ permissions:
 jobs:
   release-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -31,11 +32,11 @@ jobs:
           EXPECTED_VERSION: ${{ steps.release.outputs.version }}
         shell: bash
         run: |
-          for attempt in {1..30}; do
-            if curl --fail --silent --show-error http://127.0.0.1:8000/health > /tmp/akshara-health.json; then
+          for attempt in {1..900}; do
+            if curl --fail --silent http://127.0.0.1:8000/health > /tmp/akshara-health.json; then
               break
             fi
-            if [ "$attempt" -eq 30 ]; then
+            if [ "$attempt" -eq 900 ]; then
               docker logs akshara-release-test
               exit 1
             fi
