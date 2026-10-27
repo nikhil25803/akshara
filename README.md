@@ -12,6 +12,9 @@
 [![llama.cpp planned](https://img.shields.io/badge/llama.cpp-planned-555555)](https://github.com/ggml-org/llama.cpp)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
+<br>
+<img src="assets/img/banner.png" alt="Akshara — Documents to Understanding" width="100%">
+
 </div>
 
 ## Table of contents
