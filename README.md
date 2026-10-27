@@ -1,8 +1,7 @@
+<h1 align="center">Akshara | अक्षर</h1>
+<p align="center"><strong>From text to understanding.</strong></p>
+
 <div align="center">
-
-# Akshara | अक्षर
-
-**From text to understanding.**
 
 [![Test](https://github.com/nikhil25803/akshara/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/nikhil25803/akshara/actions/workflows/test.yml)
 [![Build](https://github.com/nikhil25803/akshara/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/nikhil25803/akshara/actions/workflows/build.yml)
@@ -15,13 +14,9 @@
 
 </div>
 
-Akshara is an open-source, local-first document intelligence engine built with
-Python. It turns images and PDFs into structured text through a secure HTTP API.
-
 ## Table of contents
 
-- [The problem](#the-problem)
-- [How Akshara helps](#how-akshara-helps)
+- [About](#about)
 - [Features and roadmap](#features-and-roadmap)
 - [Tech stack](#tech-stack)
 - [Docker installation](#docker-installation)
@@ -32,32 +27,21 @@ Python. It turns images and PDFs into structured text through a secure HTTP API.
 - [Supported OCR languages](#supported-ocr-languages)
 - [Project](#project)
 
-## The problem
+## About
 
-OCR can recover characters from a document, but characters alone are rarely the
-answer an application needs. A driving licence scan may yield every visible
-word without identifying which value is the licence number, expiry date, or
-holder name. Answering questions reliably then requires another stack for
-layout interpretation, schema mapping, retrieval, model integration, and chat
-session management.
+OCR can recover text, but applications need meaning, such as identifying the
+licence number or expiry date instead of returning every string on a driving
+licence. Building that understanding usually requires separate systems for
+layout parsing, schema mapping, retrieval, models, and chat sessions.
 
-Teams should not have to assemble and operate that entire pipeline, or deploy an
-external vector database, just to ask questions about one uploaded document.
+Akshara aims to provide that pipeline behind one local API, supporting fixed
+schemas, direct document questions, and temporary real-time chat without
+requiring users to operate external retrieval or vector infrastructure.
 
-## How Akshara helps
-
-Akshara aims to own the path from document ingestion to useful output behind one
-local API. Clients will be able to request a caller-defined fixed schema, ask a
-direct question, or open a real-time document chat without managing the OCR,
-retrieval, and model pipeline themselves. Retrieval remains in memory, avoiding
-external vector infrastructure.
-
-Real-time chat will keep context only for the active WebSocket connection and
-discard it when that connection closes. Version 0.0.1 provides the secure OCR
-foundation for this vision: embedded PDF text extraction, scanned-page OCR,
+Version 0.0.1 delivers the secure OCR foundation: PDF and image extraction,
 multilingual configuration, upload validation, authentication, limits, and CPU
-Docker deployment. Semantic extraction and conversational features are still
-upcoming.
+Docker deployment. Semantic extraction, in-memory retrieval, and WebSocket chat
+are planned for future releases.
 
 ## Features and roadmap
 
