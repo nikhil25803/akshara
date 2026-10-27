@@ -78,9 +78,8 @@ class OCRService:
     def probe(self) -> None:
         try:
             self.runtime_installed = self._runtime_probe()
-        except (
-            Exception
-        ):  # noqa: BLE001 - readiness must survive any broken native runtime
+        # A broken native runtime must degrade readiness instead of stopping startup.
+        except Exception:  # noqa: BLE001
             self.runtime_installed = False
         self.ready = self.runtime_installed
 
