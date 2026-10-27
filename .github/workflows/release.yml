@@ -34,59 +34,10 @@ jobs:
         id: release
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        shell: python
-        run: |
-          import os
-          import re
-          import tomllib
-          from pathlib import Path
-
-          tag = os.environ["RELEASE_TAG"]
-          match = re.fullmatch(r"v(\d+\.\d+\.\d+)", tag)
-          if not match:
-              raise SystemExit(f"Release tag must be vMAJOR.MINOR.PATCH, got {tag}")
-          release_version = match.group(1)
-
-          project = tomllib.loads(Path("pyproject.toml").read_text())
-          project_version = project["project"]["version"]
-          package_text = Path("src/akshara/__init__.py").read_text()
-          package_match = re.search(
-              r'^__version__ = "([^"]+)"$', package_text, re.MULTILINE
-          )
-          package_version = package_match.group(1) if package_match else None
-          if project_version != release_version or package_version != release_version:
-              raise SystemExit(
-                  "Tag, pyproject.toml, and package versions must match: "
-                  f"{tag=}, {project_version=}, {package_version=}"
-              )
-
-          changelog = Path("CHANGELOG.md").read_text()
-          heading = re.search(
-              rf"^## \[{re.escape(release_version)}\] - \d{{4}}-\d{{2}}-\d{{2}}$",
-              changelog,
-              re.MULTILINE,
-          )
-          if not heading:
-              raise SystemExit(
-                  f"CHANGELOG.md needs a dated [{release_version}] section"
-              )
-          next_heading = re.search(
-              r"^(?:## |\[[^]]+\]:)",
-              changelog[heading.end() :],
-              re.MULTILINE,
-          )
-          end = (
-              heading.end() + next_heading.start()
-              if next_heading
-              else len(changelog)
-          )
-          notes = changelog[heading.end() : end].strip()
-          if not notes:
-              raise SystemExit(f"CHANGELOG.md section [{release_version}] is empty")
-          Path("/tmp/release-notes.md").write_text(notes + "\n")
-
-          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
-              output.write(f"version={release_version}\n")
+        run: >-
+          python3 src/akshara/helpers/release.py
+          --tag "$RELEASE_TAG"
+          --notes-file /tmp/release-notes.md
 
       - name: Install dependencies
         run: uv sync --locked

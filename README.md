@@ -33,18 +33,30 @@ Python. It turns images and PDFs into structured text through a secure HTTP API.
 
 ## The problem
 
-Document pipelines must handle both digital PDFs with embedded text and scanned
-images that require OCR. Building this reliably also means validating untrusted
-uploads, enforcing resource limits, supporting multiple languages, and avoiding
-the privacy trade-offs of sending documents to a third-party service.
+OCR can recover characters from a document, but characters alone are rarely the
+answer an application needs. A driving licence scan may yield every visible
+word without identifying which value is the licence number, expiry date, or
+holder name. Answering questions reliably then requires another stack for
+layout interpretation, schema mapping, retrieval, model integration, and chat
+session management.
+
+Teams should not have to assemble and operate that entire pipeline—or deploy an
+external vector database—just to ask questions about one uploaded document.
 
 ## How Akshara helps
 
-Akshara packages those concerns behind one local API. It extracts embedded PDF
-text first, falls back to PaddleOCR for scanned content, validates actual file
-bytes, and applies authentication and processing limits before work begins. The
-CPU image can run on a workstation or in a private container platform while the
-documents and downloaded models remain under the operator's control.
+Akshara aims to own the path from document ingestion to useful output behind one
+local API. Clients will be able to request a caller-defined fixed schema, ask a
+direct question, or open a real-time document chat without managing the OCR,
+retrieval, and model pipeline themselves. Retrieval remains in memory, avoiding
+external vector infrastructure.
+
+Real-time chat will keep context only for the active WebSocket connection and
+discard it when that connection closes. Version 0.0.1 provides the secure OCR
+foundation for this vision: embedded PDF text extraction, scanned-page OCR,
+multilingual configuration, upload validation, authentication, limits, and CPU
+Docker deployment. Semantic extraction and conversational features are still
+upcoming.
 
 ## Features and roadmap
 
@@ -55,8 +67,10 @@ documents and downloaded models remain under the operator's control.
 | Environment-controlled multilingual OCR | **Available** |
 | API-key authentication and upload/resource limits | **Available** |
 | CPU Docker deployment with persistent model caching | **Available** |
-| WebSocket chat (`ws://` locally and `wss://` behind TLS) | **Upcoming** |
-| In-memory retrieval-augmented generation (RAG) | **Upcoming** |
+| Caller-defined fixed-schema extraction | **Upcoming** |
+| Direct questions against an uploaded document | **Upcoming** |
+| In-memory retrieval without an external vector database | **Upcoming** |
+| Session-scoped WebSocket chat (`ws://` locally, `wss://` behind TLS) | **Upcoming** |
 | Local llama.cpp-assisted document answers | **Upcoming** |
 
 ## Docker installation
