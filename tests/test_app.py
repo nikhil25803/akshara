@@ -1,4 +1,8 @@
+from importlib.metadata import version
+
 from fastapi.testclient import TestClient
+
+from akshara import __version__
 
 
 def test_root(client: TestClient) -> None:
@@ -9,6 +13,7 @@ def test_root(client: TestClient) -> None:
     body = response.json()
     assert body["name"] == "Akshara"
     assert body["name_native"] == "अक्षर"
+    assert body["version"] == __version__ == version("akshara")
     assert body["features"]["ocr"] is True
 
 
