@@ -23,6 +23,7 @@ Python. It turns images and PDFs into structured text through a secure HTTP API.
 - [The problem](#the-problem)
 - [How Akshara helps](#how-akshara-helps)
 - [Features and roadmap](#features-and-roadmap)
+- [Tech stack](#tech-stack)
 - [Docker installation](#docker-installation)
 - [Environment configuration](#environment-configuration)
 - [API documentation](#api-documentation)
@@ -40,8 +41,8 @@ holder name. Answering questions reliably then requires another stack for
 layout interpretation, schema mapping, retrieval, model integration, and chat
 session management.
 
-Teams should not have to assemble and operate that entire pipeline—or deploy an
-external vector database—just to ask questions about one uploaded document.
+Teams should not have to assemble and operate that entire pipeline, or deploy an
+external vector database, just to ask questions about one uploaded document.
 
 ## How Akshara helps
 
@@ -60,18 +61,35 @@ upcoming.
 
 ## Features and roadmap
 
-| Capability | Status |
-| --- | --- |
-| JPEG, PNG, and PDF OCR | **Available** |
-| Embedded PDF text with scanned-page OCR fallback | **Available** |
-| Environment-controlled multilingual OCR | **Available** |
-| API-key authentication and upload/resource limits | **Available** |
-| CPU Docker deployment with persistent model caching | **Available** |
-| Caller-defined fixed-schema extraction | **Upcoming** |
-| Direct questions against an uploaded document | **Upcoming** |
-| In-memory retrieval without an external vector database | **Upcoming** |
-| Session-scoped WebSocket chat (`ws://` locally, `wss://` behind TLS) | **Upcoming** |
-| Local llama.cpp-assisted document answers | **Upcoming** |
+| Capability                                                           | Status        |
+| -------------------------------------------------------------------- | ------------- |
+| JPEG, PNG, and PDF OCR                                               | **Available** |
+| Embedded PDF text with scanned-page OCR fallback                     | **Available** |
+| Environment-controlled multilingual OCR                              | **Available** |
+| API-key authentication and upload/resource limits                    | **Available** |
+| CPU Docker deployment with persistent model caching                  | **Available** |
+| Caller-defined fixed-schema extraction                               | **Upcoming**  |
+| Direct questions against an uploaded document                        | **Upcoming**  |
+| In-memory retrieval without an external vector database              | **Upcoming**  |
+| Session-scoped WebSocket chat (`ws://` locally, `wss://` behind TLS) | **Upcoming**  |
+| Local llama.cpp-assisted document answers                            | **Upcoming**  |
+
+<a id="tech-stack"></a>
+
+## 🛠 Tech Stack
+
+| Layer                  | Technology                           |
+| ---------------------- | ------------------------------------ |
+| Runtime                | Python 3.11+                         |
+| API framework          | FastAPI                              |
+| ASGI server            | Uvicorn                              |
+| OCR engine             | PaddleOCR 3.x + PaddlePaddle 3.2 CPU |
+| Document processing    | PyMuPDF + Pillow                     |
+| Configuration          | Pydantic Settings                    |
+| Dependency management  | uv                                   |
+| Testing and linting    | pytest + Ruff                        |
+| Container and registry | Docker + GitHub Container Registry   |
+| CI/CD                  | GitHub Actions                       |
 
 ## Docker installation
 
@@ -105,37 +123,37 @@ make generate-key
 ```
 
 Save the generated value as `API_KEY` in `.env`. The command uses Python's
-standard-library `secrets` module; any strong value of at least 32 characters is
+standard-library `secrets` module, any strong value of at least 32 characters is
 valid.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `API_KEY` | required | Key of at least 32 characters; protects every endpoint except `/` and `/health` |
-| `OCR_LANGUAGES` | `en,hi` | Comma-separated language allowlist; the first language is the request default |
-| `OCR_MAX_CONCURRENT_REQUESTS` | `1` | Maximum simultaneous OCR operations per process |
-| `MAX_FILE_SIZE_MB` | `25` | Maximum uploaded file size |
-| `MAX_PDF_PAGES` | `50` | Maximum pages per PDF |
-| `MAX_IMAGE_PIXELS` | `25000000` | Maximum pixels per image or rendered PDF page |
-| `ENABLE_LLM` | `false` | Reserved for the upcoming local LLM feature; keep disabled |
+| Variable                      | Default    | Purpose                                                                         |
+| ----------------------------- | ---------- | ------------------------------------------------------------------------------- |
+| `API_KEY`                     | required   | Key of at least 32 characters, protects every endpoint except `/` and `/health` |
+| `OCR_LANGUAGES`               | `en,hi`    | Comma-separated language allowlist, the first language is the request default   |
+| `OCR_MAX_CONCURRENT_REQUESTS` | `1`        | Maximum simultaneous OCR operations per process                                 |
+| `MAX_FILE_SIZE_MB`            | `25`       | Maximum uploaded file size                                                      |
+| `MAX_PDF_PAGES`               | `50`       | Maximum pages per PDF                                                           |
+| `MAX_IMAGE_PIXELS`            | `25000000` | Maximum pixels per image or rendered PDF page                                   |
+| `ENABLE_LLM`                  | `false`    | Reserved for the upcoming local LLM feature, keep disabled                      |
 
 ## API documentation
 
-| Request | Description | Example |
-| --- | --- | --- |
-| `GET /` | Service metadata and enabled features | `curl http://localhost:8000/` |
-| `GET /health` | PaddleOCR runtime readiness | `curl http://localhost:8000/health` |
+| Request        | Description                           | Example                                                                                    |
+| -------------- | ------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `GET /`        | Service metadata and enabled features | `curl http://localhost:8000/`                                                              |
+| `GET /health`  | PaddleOCR runtime readiness           | `curl http://localhost:8000/health`                                                        |
 | `POST /v1/ocr` | Extract text from a JPEG, PNG, or PDF | `curl -X POST -H "api_key: $API_KEY" -F "file=@document.pdf" http://localhost:8000/v1/ocr` |
 
 `POST /v1/ocr` accepts one `file` field as `multipart/form-data`. Filenames and
 client MIME declarations are not trusted. Select one configured OCR language
-with `language`; it defaults to the first value in `OCR_LANGUAGES`.
+with `language`, it defaults to the first value in `OCR_LANGUAGES`.
 
-| Query parameter | Default | Effect |
-| --- | --- | --- |
-| `language` | first configured language | Selects one enabled PaddleOCR language |
-| `page_details` | `false` | Includes text for each page |
-| `extraction_source` | `false` | Includes `embedded_text` or `paddleocr` for each page |
-| `coordinates` | `false` | Includes normalized `0..1` text polygons |
+| Query parameter     | Default                   | Effect                                                |
+| ------------------- | ------------------------- | ----------------------------------------------------- |
+| `language`          | first configured language | Selects one enabled PaddleOCR language                |
+| `page_details`      | `false`                   | Includes text for each page                           |
+| `extraction_source` | `false`                   | Includes `embedded_text` or `paddleocr` for each page |
+| `coordinates`       | `false`                   | Includes normalized `0..1` text polygons              |
 
 Example with every optional detail:
 
@@ -170,7 +188,7 @@ make run
 ```
 
 Put the generated key in `.env` before starting the server. Full PaddlePaddle
-inference is provided by the Linux Docker image; a development environment
+inference is provided by the Linux Docker image, a development environment
 without that runtime starts in degraded mode.
 
 Run the complete local check suite with:
@@ -184,10 +202,10 @@ make check
 These CPU starting points assume `ENABLE_LLM=false` and
 `OCR_MAX_CONCURRENT_REQUESTS=1`:
 
-| Profile | CPU | Memory | Intended use |
-| --- | --- | --- | --- |
-| Minimum | 1 vCPU | 2 GiB | Development and small documents |
-| Production starting point | 2 vCPU | 4 GiB | Safer baseline for one OCR request at a time |
+| Profile                   | CPU    | Memory | Intended use                                 |
+| ------------------------- | ------ | ------ | -------------------------------------------- |
+| Minimum                   | 1 vCPU | 2 GiB  | Development and small documents              |
+| Production starting point | 2 vCPU | 4 GiB  | Safer baseline for one OCR request at a time |
 
 Large PDFs, high pixel limits, additional cached languages, or higher
 concurrency require workload-specific testing and larger limits.
