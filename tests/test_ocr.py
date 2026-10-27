@@ -243,7 +243,11 @@ def test_degraded_runtime_returns_503(client: TestClient) -> None:
     app.state.ocr_service = service
     service.probe()
 
-    assert client.get("/health").json() == {"status": "degraded", "paddleocr": False}
+    assert client.get("/health").json() == {
+        "status": "degraded",
+        "paddleocr": False,
+        "llama_cpp": False,
+    }
     assert post_file(client, image_bytes(), "image/png").status_code == 503
 
 
