@@ -2,21 +2,33 @@ name: Build
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  docker:
+  release-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate release metadata
+        id: release
+        run: >-
+          python3 src/akshara/helpers/release.py
+          --notes-file /tmp/release-notes.md
+
       - name: Build image
-        run: make docker-build IMAGE=akshara TAG=ci
+        run: make docker-build IMAGE=akshara TAG=release-test
+
       - name: Start container
-        run: docker run --detach --name akshara-ci --publish 8000:8000 --env ENABLE_LLM=false --env API_KEY=ci-only-api-key-with-at-least-32-characters akshara:ci
+        run: docker run --detach --name akshara-release-test --publish 8000:8000 --env ENABLE_LLM=false --env API_KEY=ci-only-api-key-with-at-least-32-characters akshara:release-test
+
       - name: Smoke test
+        env:
+          EXPECTED_VERSION: ${{ steps.release.outputs.version }}
         shell: bash
         run: |
           for attempt in {1..30}; do
@@ -24,15 +36,16 @@ jobs:
               break
             fi
             if [ "$attempt" -eq 30 ]; then
-              docker logs akshara-ci
+              docker logs akshara-release-test
               exit 1
             fi
             sleep 1
           done
 
           python -c 'import json; data=json.load(open("/tmp/akshara-health.json")); assert data == {"status": "ok", "paddleocr": True}'
-          curl --fail --silent --show-error http://127.0.0.1:8000/ | python -c 'import json, sys; assert json.load(sys.stdin)["features"]["llm"] is False'
+          curl --fail --silent --show-error http://127.0.0.1:8000/ | python -c 'import json, os, sys; data=json.load(sys.stdin); assert data["version"] == os.environ["EXPECTED_VERSION"]; assert data["features"]["llm"] is False'
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/v1/ocr)" = "401"
+
       - name: Stop container
         if: always()
-        run: docker rm --force akshara-ci
+        run: docker rm --force akshara-release-test
