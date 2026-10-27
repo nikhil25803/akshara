@@ -35,7 +35,7 @@ Install the cross-platform development dependencies:
 uv sync
 ```
 
-PaddlePaddle inference is supported through the Linux container. Copy the example configuration and generate a local key without downloading any extra tool:
+The Linux container installs the complete CPU OCR runtime: PaddleOCR comes from the required project dependencies, and the `ocr` extra adds PaddlePaddle. Copy the example configuration and generate a local key without downloading any extra tool:
 
 ```bash
 cp .env.example .env
@@ -51,7 +51,20 @@ make docker-build
 make docker-run
 ```
 
-The first OCR request for each language downloads its model. The `akshara-models` Docker volume keeps those models between containers.
+Only the language model weights are downloaded lazily on the first OCR request for each language. The `akshara-models` Docker volume keeps them between containers.
+
+The current image targets `linux/amd64`. This repository does not publish an image, so Kubernetes operators must build it, push it to their own registry, and use that image reference in their workload. Mount a writable persistent volume at `/models` so model weights survive pod replacement.
+
+### CPU and memory
+
+These starting points assume `ENABLE_LLM=false`, `OCR_MAX_CONCURRENT_REQUESTS=1`, and CPU inference:
+
+| Profile | CPU | Memory | Intended use |
+| --- | --- | --- | --- |
+| Minimum | 1 vCPU | 2 GiB | Development and small documents |
+| Production starting point | 2 vCPU | 4 GiB | Safer baseline for one OCR request at a time |
+
+Large PDFs, high pixel limits, additional cached languages, or higher OCR concurrency require workload-specific testing and larger limits.
 
 ## OCR API
 

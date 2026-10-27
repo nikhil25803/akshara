@@ -18,6 +18,7 @@ RUN apt-get update \
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
+# Project dependencies install PaddleOCR; the ocr extra adds Linux PaddlePaddle.
 RUN uv sync --locked --no-dev --no-editable --extra ocr \
     && useradd --create-home --uid 10001 app \
     && mkdir /models \
