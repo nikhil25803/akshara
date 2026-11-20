@@ -81,11 +81,14 @@ jobs:
             echo
             echo "| Fixture | HTTP | MIME type | Extraction source | Pages | Characters | Warnings | Duration | Result |"
             echo "| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | --- |"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
           if [ "$ready" != "true" ]; then
             exit 1
           fi
+
+          echo "Health API response:"
+          python3 -m json.tool /tmp/akshara-health.json
 
       - name: OCR JPEG
         id: jpeg
@@ -127,15 +130,15 @@ jobs:
             echo "- PNG result: **${PNG_OUTCOME}**"
             echo "- PDF result: **${PDF_OUTCOME}**"
             echo "- Total staged test time: **${total_seconds}s**"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
           if [ "$HEALTH_OUTCOME" = "success" ] \
             && [ "$JPEG_OUTCOME" = "success" ] \
             && [ "$PNG_OUTCOME" = "success" ] \
             && [ "$PDF_OUTCOME" = "success" ]; then
-            echo "- Overall result: **Passed**" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Overall result: **Passed**" | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            echo "- Overall result: **Failed**" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Overall result: **Failed**" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 

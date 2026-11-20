@@ -34,6 +34,13 @@ else
   duration="timeout"
 fi
 
+echo "${label} OCR API response:"
+if [ -s "$response" ]; then
+  python3 -m json.tool "$response"
+else
+  echo "No response body received."
+fi
+
 if [ "$http_code" = "200" ] && details="$(
   python3 - "$response" "$expected_mime" "$expected_source" <<'PY'
 import json
@@ -76,6 +83,10 @@ if [ "$duration" = "timeout" ]; then
 else
   duration_display="${duration}s"
 fi
+
+printf '%s OCR metrics: HTTP=%s, MIME=%s, Source=%s, Pages=%s, Characters=%s, Warnings=%s, Duration=%s, Result=%s\n' \
+  "$label" "$http_code" "$mime" "$source" "$pages" "$characters" \
+  "$warnings" "$duration_display" "$result"
 
 printf '| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n' \
   "$label" "$http_code" "$mime" "$source" "$pages" "$characters" \
