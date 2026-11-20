@@ -1,0 +1,178 @@
+name: OCR Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ocr-test.yml"
+      - "assets/test/**"
+      - "src/**"
+      - "Dockerfile"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
+  pull_request:
+    paths:
+      - ".github/workflows/ocr-test.yml"
+      - "assets/test/**"
+      - "src/**"
+      - "Dockerfile"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
+
+permissions:
+  contents: read
+
+jobs:
+  ocr-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      API_KEY: ci-only-api-key-with-at-least-32-characters
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: make docker-build IMAGE=akshara TAG=ocr-test
+
+      - name: Start server
+        run: >-
+          docker run --detach --name akshara-ocr-test --publish 8000:8000
+          --env API_KEY --env ENABLE_LLM=false --env OCR_LANGUAGES=en
+          akshara:ocr-test
+
+      - name: Check health and OCR fixtures
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          summary="$GITHUB_STEP_SUMMARY"
+          test_started=$SECONDS
+          health_started=$SECONDS
+          ready=false
+          health_code="000"
+
+          for ((attempt = 1; attempt <= 120; attempt++)); do
+            health_code="$(
+              curl --silent --show-error --max-time 5 \
+                --output /tmp/akshara-health.json \
+                --write-out "%{http_code}" \
+                http://127.0.0.1:8000/health || true
+            )"
+            if [ "$health_code" = "200" ] && python3 -c \
+              'import json; data=json.load(open("/tmp/akshara-health.json")); assert data == {"status": "ok", "paddleocr": True}'; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+
+          readiness_seconds=$((SECONDS - health_started))
+          {
+            echo "## OCR endpoint test"
+            echo
+            echo "- Server ready: **${ready}**"
+            echo "- Health HTTP status: **${health_code}**"
+            echo "- Server readiness time: **${readiness_seconds}s**"
+            echo
+          } >> "$summary"
+
+          if [ "$ready" != "true" ]; then
+            echo "**Overall result: Failed — the server did not become healthy.**" >> "$summary"
+            exit 1
+          fi
+
+          {
+            echo "| Fixture | HTTP | MIME type | Extraction source | Pages | Characters | Warnings | Duration | Result |"
+            echo "| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | --- |"
+          } >> "$summary"
+
+          failures=0
+
+          check_ocr() {
+            local label="$1"
+            local fixture="$2"
+            local expected_mime="$3"
+            local expected_source="$4"
+            local response="/tmp/akshara-${label,,}.json"
+            local metrics http_code duration details
+            local mime="—" pages="—" characters="—" warnings="—" source="—" result="Failed"
+
+            if metrics="$(
+              curl --silent --show-error --max-time 300 \
+                --output "$response" \
+                --write-out $'%{http_code}\t%{time_total}' \
+                --header "api_key: ${API_KEY}" \
+                --form "file=@${fixture}" \
+                "http://127.0.0.1:8000/v1/ocr?language=en&extraction_source=true"
+            )"; then
+              IFS=$'\t' read -r http_code duration <<< "$metrics"
+            else
+              http_code="000"
+              duration="timeout"
+            fi
+
+            if [ "$http_code" = "200" ] && details="$(
+              python3 - "$response" "$expected_mime" "$expected_source" <<'PY'
+          import json
+          import sys
+
+          response_path, expected_mime, expected_source = sys.argv[1:]
+          with open(response_path) as response_file:
+              data = json.load(response_file)
+
+          assert data.get("mime_type") == expected_mime, "unexpected MIME type"
+          assert data.get("language") == "en", "unexpected OCR language"
+          assert isinstance(data.get("text"), str) and data["text"].strip(), "empty text"
+          assert isinstance(data.get("page_count"), int) and data["page_count"] >= 1, "invalid page count"
+          assert isinstance(data.get("warnings"), list), "invalid warnings"
+          assert isinstance(data.get("pages"), list), "missing page details"
+          assert len(data["pages"]) == data["page_count"], "page details do not match page count"
+
+          sources = sorted({page.get("extraction_source") for page in data["pages"]})
+          assert sources == [expected_source], "unexpected extraction source"
+          print(
+              data["mime_type"],
+              data["page_count"],
+              len(data["text"]),
+              len(data["warnings"]),
+              ", ".join(sources),
+              sep="\t",
+          )
+          PY
+            )"; then
+              IFS=$'\t' read -r mime pages characters warnings source <<< "$details"
+              result="Passed"
+            else
+              failures=$((failures + 1))
+            fi
+
+            printf '| %s | %s | %s | %s | %s | %s | %s | %s s | %s |\n' \
+              "$label" "$http_code" "$mime" "$source" "$pages" \
+              "$characters" "$warnings" "$duration" "$result" >> "$summary"
+          }
+
+          check_ocr "JPEG" "assets/test/driving-licence.jpg" "image/jpeg" "paddleocr"
+          check_ocr "PNG" "assets/test/quote.png" "image/png" "paddleocr"
+          check_ocr "PDF" "assets/test/NikhilRaj_Resume_SDE.pdf" "application/pdf" "embedded_text"
+
+          total_seconds=$((SECONDS - test_started))
+          echo >> "$summary"
+          echo "- Total health and endpoint test time: **${total_seconds}s**" >> "$summary"
+
+          if [ "$failures" -gt 0 ]; then
+            echo "- Overall result: **Failed (${failures} fixture(s))**" >> "$summary"
+            exit 1
+          fi
+
+          echo "- Overall result: **Passed**" >> "$summary"
+
+      - name: Show server logs on failure
+        if: failure()
+        run: docker logs akshara-ocr-test
+
+      - name: Stop server
+        if: always()
+        run: docker rm --force akshara-ocr-test
