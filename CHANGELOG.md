@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-11-20
+
+### Added
+
+- End-to-end GitHub Actions checks for health and JPEG, PNG, and PDF OCR.
+- OCR response details, validation metrics, and request timings in CI output.
+
 ## [0.0.1] - 2026-10-27
 
 ### Added
@@ -18,5 +25,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CPU Docker image with a persistent cache for lazily downloaded models.
 - Cross-platform tests and Docker health checks in GitHub Actions.
 
-[Unreleased]: https://github.com/nikhil25803/akshara/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/nikhil25803/akshara/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/nikhil25803/akshara/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/nikhil25803/akshara/releases/tag/v0.0.1
