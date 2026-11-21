@@ -38,13 +38,13 @@ licence number or expiry date instead of returning every string on a driving
 licence. Building that understanding usually requires separate systems for
 layout parsing, schema mapping, retrieval, models, and chat sessions.
 
-Akshara aims to provide that pipeline behind one local API, supporting fixed
-schemas, direct document questions, and temporary real-time chat without
-requiring users to operate external retrieval or vector infrastructure.
+Akshara provides that pipeline behind one local API, supporting fixed schemas
+and one-shot questions against uploaded documents without requiring users to
+operate external retrieval or vector infrastructure.
 
 Akshara provides the secure OCR foundation plus optional, caller-defined JSON
-Schema extraction through a local llama.cpp model. Retrieval, direct document
-questions, and WebSocket chat are planned for future releases.
+Schema extraction and grounded document questions through a local llama.cpp
+model. Retrieval and WebSocket chat are planned for future releases.
 
 ## Quick start
 
@@ -85,7 +85,7 @@ docker run --detach --rm --name akshara \
 
 The image targets `linux/amd64`. PaddleOCR weights download during the first
 startup, so follow progress with `docker logs -f akshara` before checking the
-service. Use `ghcr.io/nikhil25803/akshara:0.0.3` instead of `:latest` when a
+service. Use `ghcr.io/nikhil25803/akshara:0.0.4` instead of `:latest` when a
 deployment must remain pinned to this release.
 
 ### `GET /health`
@@ -136,10 +136,10 @@ curl --request POST \
 
 </details>
 
-### Enable schema extraction
+### Enable llama.cpp features
 
 Stop the OCR-only container, download the same compact model used by CI, and
-restart with llama.cpp enabled:
+restart with schema extraction and document questions enabled:
 
 ```bash
 docker stop akshara
@@ -164,7 +164,7 @@ docker run --detach --rm --name akshara \
   ghcr.io/nikhil25803/akshara:latest
 ```
 
-When `GET /health` reports `"llama_cpp": true`, schema extraction is ready.
+When `GET /health` reports `"llama_cpp": true`, both llama.cpp features are ready.
 
 <details>
 <summary>Schema-enabled health response</summary>
@@ -201,21 +201,42 @@ curl --request POST \
 
 </details>
 
+### `POST /v1/ocr/ask`
+
+```bash
+curl --request POST \
+  --header "api_key: $API_KEY" \
+  --form "file=@assets/test/quote.png" \
+  --form-string "question=Who wrote this quote?" \
+  "http://127.0.0.1:8000/v1/ocr/ask?language=en"
+```
+
+<details>
+<summary>Document question response</summary>
+
+```json
+{
+  "answer": "Charles Dickens"
+}
+```
+
+</details>
+
 ## Tech Stack
 
-| Layer                  | Technology                           |
-| ---------------------- | ------------------------------------ |
-| Runtime                | Python 3.11+                         |
-| API framework          | FastAPI                              |
-| ASGI server            | Uvicorn                              |
-| OCR engine             | PaddleOCR 3.x + PaddlePaddle 3.2 CPU |
-| Document processing    | PyMuPDF + Pillow                     |
-| Structured extraction  | llama.cpp + JSON Schema              |
-| Configuration          | Pydantic Settings                    |
-| Dependency management  | uv                                   |
-| Testing and linting    | pytest + Ruff                        |
-| Container and registry | Docker + GitHub Container Registry   |
-| CI/CD                  | GitHub Actions                       |
+| Layer                         | Technology                           |
+| ----------------------------- | ------------------------------------ |
+| Runtime                       | Python 3.11+                         |
+| API framework                 | FastAPI                              |
+| ASGI server                   | Uvicorn                              |
+| OCR engine                    | PaddleOCR 3.x + PaddlePaddle 3.2 CPU |
+| Document processing           | PyMuPDF + Pillow                     |
+| Structured extraction and Q&A | llama.cpp + JSON Schema              |
+| Configuration                 | Pydantic Settings                    |
+| Dependency management         | uv                                   |
+| Testing and linting           | pytest + Ruff                        |
+| Container and registry        | Docker + GitHub Container Registry   |
+| CI/CD                         | GitHub Actions                       |
 
 ## Environment configuration
 
@@ -241,7 +262,7 @@ valid.
 | `MAX_FILE_SIZE_MB`            | `25`                  | Maximum uploaded file size                                                      |
 | `MAX_PDF_PAGES`               | `50`                  | Maximum pages per PDF                                                           |
 | `MAX_IMAGE_PIXELS`            | `25000000`            | Maximum pixels per image or rendered PDF page                                   |
-| `ENABLE_LLM`                  | `false`               | Enables JSON Schema extraction through llama.cpp                                |
+| `ENABLE_LLM`                  | `false`               | Enables schema extraction and document questions through llama.cpp              |
 | `LLM_BACKEND`                 | `llama_cpp`           | Local inference backend                                                         |
 | `LLM_MODEL_PATH`              | `./models/model.gguf` | Path to the GGUF model                                                          |
 | `LLM_DEVICE`                  | `cpu`                 | Inference device; Linux AMD64 CPU is currently supported                        |
@@ -295,6 +316,18 @@ is exactly the schema-shaped object, without raw OCR text or metadata.
 
 Callers should allow `null` in their schema for values that may be absent. The
 service does not alter schemas or invent fallback values. Invalid schemas return
+`422`, busy inference returns `429`, invalid model output returns `502`, and a
+disabled or unavailable model returns `503`.
+
+### `POST /v1/ocr/ask`
+
+Accepts a supported `file` plus a `question` form field. Questions are trimmed,
+must not be empty, and are limited to 4 KiB of UTF-8 text. The response is
+`{"answer":"..."}` when the document contains a grounded answer or
+`{"answer":null}` when it does not. Raw OCR text and metadata are not returned.
+
+The endpoint uses the same `language` query parameter and llama.cpp runtime as
+schema extraction. Context overflow returns `413`, invalid questions return
 `422`, busy inference returns `429`, invalid model output returns `502`, and a
 disabled or unavailable model returns `503`.
 
@@ -492,7 +525,7 @@ retain an additional model in `/models`.
 | CPU Docker deployment with persistent model caching                  | **Available** |
 | Caller-defined fixed-schema extraction                               | **Available** |
 | Local llama.cpp structured extraction                                | **Available** |
-| Direct questions against an uploaded document                        | **Upcoming**  |
+| Direct questions against an uploaded document                        | **Available** |
 | In-memory retrieval without an external vector database              | **Upcoming**  |
 | Session-scoped WebSocket chat (`ws://` locally, `wss://` behind TLS) | **Upcoming**  |
 

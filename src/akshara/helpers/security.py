@@ -38,7 +38,7 @@ class RequestSizeLimitMiddleware:
         if (
             scope["type"] != "http"
             or scope["method"] != "POST"
-            or scope["path"] not in {"/v1/ocr", "/v1/ocr/schema"}
+            or scope["path"] not in {"/v1/ocr", "/v1/ocr/schema", "/v1/ocr/ask"}
         ):
             await self.app(scope, receive, send)
             return
