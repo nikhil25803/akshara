@@ -7,10 +7,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-11-21
+
 ### Added
 
 - Caller-defined JSON Schema extraction through a local llama.cpp model.
 - Real-model schema extraction coverage in the OCR GitHub Actions workflow.
+- Contribution, security, conduct, issue, and pull-request guidance.
+
+### Changed
+
+- Added Docker-first quick-start and real OCR and schema response examples to the README.
 
 ## [0.0.2] - 2026-11-20
 
@@ -30,6 +37,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - CPU Docker image with a persistent cache for lazily downloaded models.
 - Cross-platform tests and Docker health checks in GitHub Actions.
 
-[Unreleased]: https://github.com/nikhil25803/akshara/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/nikhil25803/akshara/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/nikhil25803/akshara/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/nikhil25803/akshara/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/nikhil25803/akshara/releases/tag/v0.0.1
