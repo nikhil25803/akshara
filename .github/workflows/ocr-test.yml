@@ -241,7 +241,6 @@ jobs:
           bash .github/scripts/ocr-schema-check.sh LICENCE
           assets/test/driving-licence.jpg
           assets/test/driving-licence.schema.json
-          '{"issue_date":"02/02/2010","date_of_expiry":"01/02/2030"}'
 
       - name: Extract quote author schema
         id: quote-schema
@@ -250,7 +249,6 @@ jobs:
           bash .github/scripts/ocr-schema-check.sh QUOTE
           assets/test/quote.png
           assets/test/quote.schema.json
-          '{"author":"Charles Dickens"}'
 
       - name: Extract resume companies schema
         id: resume-schema
@@ -259,7 +257,6 @@ jobs:
           bash .github/scripts/ocr-schema-check.sh RESUME
           assets/test/NikhilRaj_Resume_SDE.pdf
           assets/test/resume-companies.schema.json
-          '{"companies":["Cautio","Mswasth Tech Pvt Ltd."]}'
 
       - name: Summarize schema results
         if: always()

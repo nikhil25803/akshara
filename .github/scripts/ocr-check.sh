@@ -20,6 +20,11 @@ warnings="—"
 source="—"
 result="Failed"
 
+echo "${label} OCR curl request:"
+printf 'curl --request POST --header "api_key: ***" --form "file=@%s" "%s"\n' \
+  "$fixture" \
+  "http://127.0.0.1:8000/v1/ocr?language=en&extraction_source=true"
+
 if metrics="$(
   curl --silent --show-error --max-time 300 \
     --output "$response" \
