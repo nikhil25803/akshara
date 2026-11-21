@@ -25,9 +25,9 @@ class Settings(BaseSettings):
     ocr_max_concurrent_requests: int = Field(default=1, ge=1)
 
     enable_llm: bool = False
-    llm_backend: str = "llama_cpp"
+    llm_backend: Literal["llama_cpp"] = "llama_cpp"
     llm_model_path: Path = Path("./models/model.gguf")
-    llm_device: Literal["cpu", "gpu", "auto"] = "cpu"
+    llm_device: Literal["cpu"] = "cpu"
 
     max_file_size_mb: int = Field(default=25, ge=1)
     max_pdf_pages: int = Field(default=50, ge=1)

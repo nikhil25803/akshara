@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - ".github/scripts/ocr-check.sh"
+      - ".github/scripts/ocr-schema-check.sh"
       - ".github/workflows/ocr-test.yml"
       - "assets/test/**"
       - "src/**"
@@ -16,6 +17,7 @@ on:
   pull_request:
     paths:
       - ".github/scripts/ocr-check.sh"
+      - ".github/scripts/ocr-schema-check.sh"
       - ".github/workflows/ocr-test.yml"
       - "assets/test/**"
       - "src/**"
@@ -149,3 +151,150 @@ jobs:
       - name: Stop server
         if: always()
         run: docker rm --force akshara-ocr-test || true
+
+  ocr-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      API_KEY: ci-only-api-key-with-at-least-32-characters
+      MODEL_PATH: .cache/akshara-models/model.gguf
+      MODEL_SHA256: 74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db
+      MODEL_URL: https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/9217f5db79a29953eb74d5343926648285ec7e67/qwen2.5-0.5b-instruct-q4_k_m.gguf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore model cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/akshara-models/model.gguf
+          key: qwen2.5-0.5b-instruct-q4-k-m-${{ env.MODEL_SHA256 }}
+
+      - name: Download and verify model
+        run: |
+          mkdir -p "$(dirname "$MODEL_PATH")"
+          if [ ! -f "$MODEL_PATH" ]; then
+            curl --fail --location --retry 3 --output "$MODEL_PATH" "$MODEL_URL"
+          fi
+          echo "${MODEL_SHA256}  ${MODEL_PATH}" | sha256sum --check
+
+      - name: Build image
+        run: make docker-build IMAGE=akshara TAG=ocr-schema-test
+
+      - name: Start schema server
+        run: |
+          docker run --detach --name akshara-schema-test --publish 8000:8000 \
+            --env API_KEY --env ENABLE_LLM=true --env OCR_LANGUAGES=en \
+            --env LLM_BACKEND=llama_cpp --env LLM_MODEL_PATH=/models/model.gguf \
+            --env LLM_DEVICE=cpu \
+            --volume "$PWD/$MODEL_PATH:/models/model.gguf:ro" \
+            akshara:ocr-schema-test
+
+      - name: Check OCR and llama.cpp health
+        id: schema-health
+        shell: bash
+        run: |
+          started=$SECONDS
+          ready=false
+          health_code="000"
+
+          for ((attempt = 1; attempt <= 180; attempt++)); do
+            health_code="$(
+              curl --silent --max-time 5 \
+                --output /tmp/akshara-schema-health.json \
+                --write-out "%{http_code}" \
+                http://127.0.0.1:8000/health 2>/dev/null || true
+            )"
+            if [ "$health_code" = "200" ] && python3 -c \
+              'import json; data=json.load(open("/tmp/akshara-schema-health.json")); assert data == {"status": "ok", "paddleocr": True, "llama_cpp": True}'; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+
+          duration=$((SECONDS - started))
+          echo "Schema health API response:"
+          if [ -s /tmp/akshara-schema-health.json ]; then
+            python3 -m json.tool /tmp/akshara-schema-health.json
+          else
+            echo "No response body received."
+          fi
+          {
+            echo "## llama.cpp schema extraction"
+            echo
+            echo "- Server ready: **${ready}**"
+            echo "- Health HTTP status: **${health_code}**"
+            echo "- Startup and model-load time: **${duration}s**"
+            echo
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$ready" != "true" ]; then
+            exit 1
+          fi
+
+          : > /tmp/akshara-schema-results.tsv
+
+      - name: Extract driving licence schema
+        id: licence-schema
+        continue-on-error: true
+        run: >-
+          bash .github/scripts/ocr-schema-check.sh LICENCE
+          assets/test/driving-licence.jpg
+          assets/test/driving-licence.schema.json
+
+      - name: Extract quote author schema
+        id: quote-schema
+        continue-on-error: true
+        run: >-
+          bash .github/scripts/ocr-schema-check.sh QUOTE
+          assets/test/quote.png
+          assets/test/quote.schema.json
+
+      - name: Extract resume companies schema
+        id: resume-schema
+        continue-on-error: true
+        run: >-
+          bash .github/scripts/ocr-schema-check.sh RESUME
+          assets/test/NikhilRaj_Resume_SDE.pdf
+          assets/test/resume-companies.schema.json
+
+      - name: Summarize schema results
+        if: always()
+        env:
+          HEALTH_OUTCOME: ${{ steps.schema-health.outcome }}
+          LICENCE_OUTCOME: ${{ steps.licence-schema.outcome }}
+          QUOTE_OUTCOME: ${{ steps.quote-schema.outcome }}
+          RESUME_OUTCOME: ${{ steps.resume-schema.outcome }}
+        run: |
+          {
+            echo "| Document | HTTP | Duration | Result |"
+            echo "| --- | ---: | ---: | --- |"
+            if [ -s /tmp/akshara-schema-results.tsv ]; then
+              while IFS=$'\t' read -r label http_code duration result; do
+                echo "| ${label} | ${http_code} | ${duration} | ${result} |"
+              done < /tmp/akshara-schema-results.tsv
+            fi
+            echo
+            echo "- Health result: **${HEALTH_OUTCOME}**"
+            echo "- Licence result: **${LICENCE_OUTCOME}**"
+            echo "- Quote result: **${QUOTE_OUTCOME}**"
+            echo "- Resume result: **${RESUME_OUTCOME}**"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$HEALTH_OUTCOME" = "success" ] \
+            && [ "$LICENCE_OUTCOME" = "success" ] \
+            && [ "$QUOTE_OUTCOME" = "success" ] \
+            && [ "$RESUME_OUTCOME" = "success" ]; then
+            echo "- Overall result: **Passed**" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Overall result: **Failed**" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Show schema server logs on failure
+        if: failure()
+        run: docker logs akshara-schema-test || true
+
+      - name: Stop schema server
+        if: always()
+        run: docker rm --force akshara-schema-test || true

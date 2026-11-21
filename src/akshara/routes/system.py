@@ -22,5 +22,13 @@ def root() -> dict:
 
 @router.get("/health")
 def health(request: Request) -> dict[str, str | bool]:
-    ready = request.app.state.ocr_service.ready
-    return {"status": "ok" if ready else "degraded", "paddleocr": ready}
+    paddle_ready = request.app.state.ocr_service.ready
+    llm_ready = request.app.state.llm_service.ready
+    ready = paddle_ready and (not get_settings().enable_llm or llm_ready)
+    response: dict[str, str | bool] = {
+        "status": "ok" if ready else "degraded",
+        "paddleocr": paddle_ready,
+    }
+    if get_settings().enable_llm:
+        response["llama_cpp"] = llm_ready
+    return response

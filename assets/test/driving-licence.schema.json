@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "issue_date": {
+      "type": "string",
+      "description": "The licence issue date exactly as written in the document"
+    },
+    "date_of_expiry": {
+      "type": "string",
+      "description": "The licence expiry date exactly as written in the document"
+    }
+  },
+  "required": ["issue_date", "date_of_expiry"],
+  "additionalProperties": false
+}

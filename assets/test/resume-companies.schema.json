@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "companies": {
+      "type": "array",
+      "description": "Employer names from the Experience section only; exclude education, projects, clients, and technologies",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    }
+  },
+  "required": ["companies"],
+  "additionalProperties": false
+}

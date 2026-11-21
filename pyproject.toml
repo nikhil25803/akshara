@@ -1,6 +1,6 @@
 [project]
 name = "akshara"
-version = "0.0.2"
+version = "0.0.3"
 description = "Akshara is an open-source, local-first document intelligence engine built with Python. It aims to turn images and PDFs into structured data and useful answers using OCR and optional LLMs."
 readme = "README.md"
 authors = [
@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.162.0",
+    "jsonschema>=4.23,<5",
     "numpy>=2.4.3",
     "paddleocr>=3.3,<4",
     "pillow>=12.1.1",
@@ -21,6 +22,9 @@ dependencies = [
 [project.optional-dependencies]
 ocr = [
     "paddlepaddle==3.2.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+llm = [
+    "llama-cpp-python>=0.3.36,<0.4; sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
 
 [project.scripts]
@@ -49,5 +53,11 @@ name = "paddle"
 url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
 explicit = true
 
+[[tool.uv.index]]
+name = "llama-cpp-python"
+url = "https://abetlen.github.io/llama-cpp-python/whl/cpu/"
+explicit = true
+
 [tool.uv.sources]
 paddlepaddle = { index = "paddle" }
+llama-cpp-python = { index = "llama-cpp-python" }
