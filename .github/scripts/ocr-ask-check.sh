@@ -10,10 +10,11 @@ fi
 label="$1"
 fixture="$2"
 question="$3"
-response="/tmp/akshara-question-${label,,}.json"
+response="/tmp/akshara-ask-${label,,}.json"
 result="Failed"
 
-echo "${label} question curl request:"
+echo "${label} question: ${question}"
+echo "${label} OCR Ask curl request:"
 printf 'curl --request POST --header "api_key: ***" --form "file=@%s" --form-string "question=%s" "%s"\n' \
   "$fixture" "$question" \
   "http://127.0.0.1:8000/v1/ocr/ask?language=en"
@@ -33,7 +34,7 @@ else
   duration="timeout"
 fi
 
-echo "${label} question API response:"
+echo "${label} OCR Ask API response:"
 if [ -s "$response" ]; then
   python3 -m json.tool "$response"
 else
@@ -50,11 +51,11 @@ else
   duration_display="${duration}s"
 fi
 
-printf '%s question metrics: HTTP=%s, Duration=%s, Result=%s\n' \
+printf '%s OCR Ask metrics: HTTP=%s, Duration=%s, Result=%s\n' \
   "$label" "$http_code" "$duration_display" "$result"
 printf '%s\t%s\t%s\t%s\n' \
   "$label" "$http_code" "$duration_display" "$result" \
-  >> /tmp/akshara-question-results.tsv
+  >> /tmp/akshara-ask-results.tsv
 
 if [ "$result" != "Passed" ]; then
   exit 1

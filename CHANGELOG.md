@@ -12,7 +12,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 - Grounded, one-shot questions against uploaded documents through llama.cpp.
-- Real-model document question coverage in the OCR GitHub Actions workflow.
+- Real-model document question coverage in a standalone OCR Ask GitHub Actions workflow.
 
 ## [0.0.3] - 2026-11-21
 
