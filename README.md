@@ -9,7 +9,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![PaddleOCR 3.x](https://img.shields.io/badge/PaddleOCR-3.x-0062B0)](https://github.com/PaddlePaddle/PaddleOCR)
-[![llama.cpp planned](https://img.shields.io/badge/llama.cpp-planned-555555)](https://github.com/ggml-org/llama.cpp)
+[![llama.cpp](https://img.shields.io/badge/llama.cpp-available-5C4EE5)](https://github.com/ggml-org/llama.cpp)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 <br>
@@ -41,10 +41,9 @@ Akshara aims to provide that pipeline behind one local API, supporting fixed
 schemas, direct document questions, and temporary real-time chat without
 requiring users to operate external retrieval or vector infrastructure.
 
-Version 0.0.1 delivers the secure OCR foundation: PDF and image extraction,
-multilingual configuration, upload validation, authentication, limits, and CPU
-Docker deployment. Semantic extraction, in-memory retrieval, and WebSocket chat
-are planned for future releases.
+Akshara provides the secure OCR foundation plus optional, caller-defined JSON
+Schema extraction through a local llama.cpp model. Retrieval, direct document
+questions, and WebSocket chat are planned for future releases.
 
 ## Features and roadmap
 
@@ -55,11 +54,11 @@ are planned for future releases.
 | Environment-controlled multilingual OCR                              | **Available** |
 | API-key authentication and upload/resource limits                    | **Available** |
 | CPU Docker deployment with persistent model caching                  | **Available** |
-| Caller-defined fixed-schema extraction                               | **Upcoming**  |
+| Caller-defined fixed-schema extraction                               | **Available** |
 | Direct questions against an uploaded document                        | **Upcoming**  |
 | In-memory retrieval without an external vector database              | **Upcoming**  |
 | Session-scoped WebSocket chat (`ws://` locally, `wss://` behind TLS) | **Upcoming**  |
-| Local llama.cpp-assisted document answers                            | **Upcoming**  |
+| Local llama.cpp structured extraction                                | **Available** |
 
 <a id="tech-stack"></a>
 
@@ -72,6 +71,7 @@ are planned for future releases.
 | ASGI server            | Uvicorn                              |
 | OCR engine             | PaddleOCR 3.x + PaddlePaddle 3.2 CPU |
 | Document processing    | PyMuPDF + Pillow                     |
+| Structured extraction  | llama.cpp + JSON Schema              |
 | Configuration          | Pydantic Settings                    |
 | Dependency management  | uv                                   |
 | Testing and linting    | pytest + Ruff                        |
@@ -91,14 +91,15 @@ After creating the `.env` file described below, run:
 ```bash
 docker run --rm -p 8000:8000 \
   --env-file .env \
-  --volume akshara-models:/models \
+  --volume "$PWD/models:/models" \
   ghcr.io/nikhil25803/akshara:latest
 ```
 
-Use `ghcr.io/nikhil25803/akshara:0.0.1` instead of `:latest` for a
+Use `ghcr.io/nikhil25803/akshara:0.0.2` instead of `:latest` for a
 reproducible deployment. The image currently targets `linux/amd64` and contains
-both PaddleOCR and the CPU PaddlePaddle runtime. Language model weights download
-on first use and persist in the writable `/models` volume.
+PaddleOCR, PaddlePaddle, and the llama.cpp CPU runtime. PaddleOCR weights
+download on first use. To enable structured extraction, place a compatible GGUF
+at `models/model.gguf` before starting the container.
 
 ## Environment configuration
 
@@ -121,7 +122,10 @@ valid.
 | `MAX_FILE_SIZE_MB`            | `25`       | Maximum uploaded file size                                                      |
 | `MAX_PDF_PAGES`               | `50`       | Maximum pages per PDF                                                           |
 | `MAX_IMAGE_PIXELS`            | `25000000` | Maximum pixels per image or rendered PDF page                                   |
-| `ENABLE_LLM`                  | `false`    | Reserved for the upcoming local LLM feature, keep disabled                      |
+| `ENABLE_LLM`                  | `false`    | Enables JSON Schema extraction through llama.cpp                                |
+| `LLM_BACKEND`                 | `llama_cpp`| Local inference backend                                                         |
+| `LLM_MODEL_PATH`              | `./models/model.gguf` | Path to the GGUF model                                               |
+| `LLM_DEVICE`                  | `cpu`      | Inference device; Linux AMD64 CPU is currently supported                        |
 
 ## API documentation
 
@@ -130,6 +134,7 @@ valid.
 | `GET /`        | Service metadata and enabled features | `curl http://localhost:8000/`                                                              |
 | `GET /health`  | PaddleOCR runtime readiness           | `curl http://localhost:8000/health`                                                        |
 | `POST /v1/ocr` | Extract text from a JPEG, PNG, or PDF | `curl -X POST -H "api_key: $API_KEY" -F "file=@document.pdf" http://localhost:8000/v1/ocr` |
+| `POST /v1/ocr/schema` | Extract an object matching JSON Schema | See the example below |
 
 `POST /v1/ocr` accepts one `file` field as `multipart/form-data`. Filenames and
 client MIME declarations are not trusted. Select one configured OCR language
@@ -157,9 +162,30 @@ The base response contains `text`, `language`, detected `mime_type`,
 unsupported or spoofed content, `422` for an unavailable language, `429` when
 OCR is busy, and `503` when PaddleOCR is unavailable.
 
-`GET /health` returns `{"status":"ok","paddleocr":true}` when the runtime is
-ready. A broken or missing runtime produces a degraded response without
-downloading model weights.
+`POST /v1/ocr/schema` accepts the same `file` plus a standard JSON Schema in the
+`schema` form field. The root schema must be an object and references are not
+supported. Its response is exactly the schema-shaped object, without raw OCR
+text or metadata:
+
+```bash
+curl -X POST "http://localhost:8000/v1/ocr/schema?language=en" \
+  -H "api_key: $API_KEY" \
+  -F "file=@assets/test/driving-licence.jpg" \
+  -F "schema=<assets/test/driving-licence.schema.json;type=application/json"
+```
+
+```json
+{"issue_date":"02/02/2010","date_of_expiry":"01/02/2030"}
+```
+
+Callers should allow `null` in their schema for values that may be absent. The
+service does not alter schemas or invent fallback values. Invalid schemas return
+`422`, busy inference returns `429`, invalid model output returns `502`, and a
+disabled or unavailable model returns `503`.
+
+`GET /health` returns `{"status":"ok","paddleocr":true}` when OCR is ready.
+With `ENABLE_LLM=true`, it also includes `"llama_cpp":true`; a missing or broken
+enabled runtime makes the service degraded.
 
 ## Local development
 
@@ -176,7 +202,9 @@ make run
 
 Put the generated key in `.env` before starting the server. Full PaddlePaddle
 inference is provided by the Linux Docker image, a development environment
-without that runtime starts in degraded mode.
+without that runtime starts in degraded mode. On Linux AMD64, install the
+optional local LLM binding with `make sync-llm`; model weights are supplied
+separately. Other development platforms should use the Docker image.
 
 Run the complete local check suite with:
 

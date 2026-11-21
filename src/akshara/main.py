@@ -6,6 +6,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from akshara import __version__
 from akshara.config import get_settings
+from akshara.helpers.llm import LLMService
 from akshara.helpers.ocr import OCRService
 from akshara.helpers.security import ApiKeyMiddleware, RequestSizeLimitMiddleware
 from akshara.routes.ocr import router as ocr_router
@@ -17,6 +18,8 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await run_in_threadpool(app.state.ocr_service.probe)
+    if settings.enable_llm:
+        await run_in_threadpool(app.state.llm_service.probe)
     yield
 
 
@@ -30,6 +33,7 @@ app = FastAPI(
 
 # Initialize OCR service
 app.state.ocr_service = OCRService(settings)
+app.state.llm_service = LLMService(settings)
 
 # Middlewares
 app.add_middleware(

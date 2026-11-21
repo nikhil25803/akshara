@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "author": {
+      "type": "string",
+      "description": "The full name of the person credited as the quote's author"
+    }
+  },
+  "required": ["author"],
+  "additionalProperties": false
+}

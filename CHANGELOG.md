@@ -7,6 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Caller-defined JSON Schema extraction through a local llama.cpp model.
+- Real-model schema extraction coverage in the OCR GitHub Actions workflow.
+
 ## [0.0.2] - 2026-11-20
 
 ### Added
